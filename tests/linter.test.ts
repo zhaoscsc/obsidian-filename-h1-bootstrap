@@ -4,9 +4,9 @@ import {
   CURRENT_FILE_LINTER_DELAY_MS,
   LINTER_FAILED_NOTICE,
   LINTER_MISSING_NOTICE,
-  normalizeLintDelayMs,
   scheduleCurrentFileLint
 } from "../linter";
+import { normalizeLintDelayMs } from "../settings";
 
 describe("scheduleCurrentFileLint", () => {
   it("does not schedule when the linter command is missing", () => {

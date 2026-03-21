@@ -25,6 +25,7 @@ When you run `Normalize current note title heading`, the plugin will:
 Runs normalization on the currently open Markdown file.
 
 If the note is changed, the plugin can also trigger `Obsidian Linter` for the current file after a configurable delay.
+This can be turned on or off in plugin settings.
 
 ### Shortcut tip
 
@@ -45,11 +46,21 @@ Note:
 
 ## Settings
 
+### Run Linter after normalization
+
+Controls whether the plugin should automatically run `Obsidian Linter` after the current note was changed by normalization.
+
+Default:
+
+`Enabled`
+
 ### Linter delay
 
 Controls how many milliseconds to wait before triggering:
 
 `Obsidian Linter: lint current file`
+
+This setting only applies when automatic Linter execution is enabled.
 
 Default:
 
@@ -145,6 +156,7 @@ npm run build
 处理当前打开的 Markdown 笔记。
 
 如果这次执行确实改动了笔记内容，插件还可以在一个可配置的延迟后，自动执行一次当前文件的 Linter。
+这个行为现在可以在插件设置里手动开启或关闭。
 
 #### 小技巧：给命令绑定快捷键
 
@@ -165,11 +177,21 @@ npm run build
 
 ### 设置
 
+#### 标题归一后自动执行 Linter
+
+控制插件在本次标题归一真的改动了当前笔记后，是否自动执行一次当前文件的 Linter。
+
+默认值：
+
+`开启`
+
 #### Linter 延迟时间
 
 控制标题归一后，等待多少毫秒再执行：
 
 `Obsidian Linter: lint current file`
+
+只有在“标题归一后自动执行 Linter”开启时，这个设置才生效。
 
 默认值：
 

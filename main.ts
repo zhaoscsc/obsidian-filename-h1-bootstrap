@@ -1,18 +1,12 @@
 import { MarkdownView, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
-import {
-  CURRENT_FILE_LINTER_DELAY_MS,
-  normalizeLintDelayMs,
-  scheduleCurrentFileLint
-} from "./linter";
+import { CURRENT_FILE_LINTER_DELAY_MS, scheduleCurrentFileLint } from "./linter";
 import { normalizeMarkdownTitleHeading } from "./normalize";
-
-interface FilenameH1BootstrapSettings {
-  lintDelayMs: number;
-}
-
-const DEFAULT_SETTINGS: FilenameH1BootstrapSettings = {
-  lintDelayMs: CURRENT_FILE_LINTER_DELAY_MS
-};
+import {
+  DEFAULT_SETTINGS,
+  FilenameH1BootstrapSettings,
+  buildNormalizeSuccessMessage,
+  normalizePluginSettings
+} from "./settings";
 
 export default class FilenameH1BootstrapPlugin extends Plugin {
   settings: FilenameH1BootstrapSettings = DEFAULT_SETTINGS;
@@ -33,9 +27,7 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     const savedData = await this.loadData();
-    this.settings = {
-      lintDelayMs: normalizeLintDelayMs(savedData?.lintDelayMs)
-    };
+    this.settings = normalizePluginSettings(savedData);
   }
 
   async saveSettings(): Promise<void> {
@@ -73,21 +65,31 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
     }
 
     await this.app.vault.modify(file, result.content);
-    const lintScheduled = scheduleCurrentFileLint(file.path, {
-      hasCommand: (commandId) => Boolean(this.app.commands?.commands?.[commandId]),
-      getActiveFilePath: () => this.app.workspace.getActiveFile()?.path ?? null,
-      executeCommandById: (commandId) => this.app.commands.executeCommandById(commandId),
-      notify: (message) => {
-        new Notice(message);
-      },
-      logError: (message, error) => {
-        console.error(message, error);
-      }
-    }, this.settings.lintDelayMs);
+    const lintScheduled = this.settings.runLinterAfterNormalize
+      ? scheduleCurrentFileLint(
+          file.path,
+          {
+            hasCommand: (commandId) => Boolean(this.app.commands?.commands?.[commandId]),
+            getActiveFilePath: () => this.app.workspace.getActiveFile()?.path ?? null,
+            executeCommandById: (commandId) =>
+              this.app.commands.executeCommandById(commandId),
+            notify: (message) => {
+              new Notice(message);
+            },
+            logError: (message, error) => {
+              console.error(message, error);
+            }
+          },
+          this.settings.lintDelayMs
+        )
+      : false;
 
-    const successMessage = lintScheduled
-      ? `标题归一完成，已触发 Linter：格式化当前文件。${this.settings.lintDelayMs}ms 后执行。`
-      : result.summary;
+    const successMessage = buildNormalizeSuccessMessage({
+      resultSummary: result.summary,
+      runLinterAfterNormalize: this.settings.runLinterAfterNormalize,
+      lintScheduled,
+      lintDelayMs: this.settings.lintDelayMs
+    });
 
     new Notice(successMessage);
   }
@@ -106,15 +108,30 @@ class FilenameH1BootstrapSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
+      .setName("标题归一后自动执行 Linter")
+      .setDesc("开启后，标题归一真的改动了当前笔记时，会自动执行“Linter：格式化当前文件”。")
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.runLinterAfterNormalize)
+          .onChange(async (value) => {
+            this.plugin.settings.runLinterAfterNormalize = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
       .setName("Linter 延迟时间")
-      .setDesc("执行标题归一后，等待多少毫秒再执行“Linter：格式化当前文件”。")
+      .setDesc("仅在“标题归一后自动执行 Linter”开启时生效。")
       .addText((text) => {
         text
           .setPlaceholder(String(CURRENT_FILE_LINTER_DELAY_MS))
           .setValue(String(this.plugin.settings.lintDelayMs))
           .onChange(async (value) => {
             const parsedValue = Number(value.trim());
-            this.plugin.settings.lintDelayMs = normalizeLintDelayMs(parsedValue);
+            this.plugin.settings = normalizePluginSettings({
+              ...this.plugin.settings,
+              lintDelayMs: parsedValue
+            });
             await this.plugin.saveSettings();
             text.setValue(String(this.plugin.settings.lintDelayMs));
           });

@@ -30,12 +30,6 @@ var CURRENT_FILE_LINTER_COMMAND_ID = "obsidian-linter:lint-file";
 var CURRENT_FILE_LINTER_DELAY_MS = 500;
 var LINTER_MISSING_NOTICE = "\u672A\u68C0\u6D4B\u5230 Linter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u547D\u4EE4\uFF0C\u5DF2\u8DF3\u8FC7\u81EA\u52A8\u683C\u5F0F\u5316\u3002";
 var LINTER_FAILED_NOTICE = "Linter \u6267\u884C\u5931\u8D25\uFF0C\u6807\u9898\u5F52\u4E00\u5DF2\u5B8C\u6210\u3002";
-function normalizeLintDelayMs(value) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return CURRENT_FILE_LINTER_DELAY_MS;
-  }
-  return Math.max(0, Math.round(value));
-}
 function scheduleCurrentFileLint(targetFilePath, deps, delayMs = CURRENT_FILE_LINTER_DELAY_MS) {
   if (!deps.hasCommand(CURRENT_FILE_LINTER_COMMAND_ID)) {
     deps.notify(LINTER_MISSING_NOTICE);
@@ -268,10 +262,43 @@ function normalizeMarkdownTitleHeading(content, fileBasename) {
   };
 }
 
-// main.ts
+// settings.ts
 var DEFAULT_SETTINGS = {
-  lintDelayMs: CURRENT_FILE_LINTER_DELAY_MS
+  lintDelayMs: CURRENT_FILE_LINTER_DELAY_MS,
+  runLinterAfterNormalize: true
 };
+function normalizeLintDelayMs(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return CURRENT_FILE_LINTER_DELAY_MS;
+  }
+  return Math.max(0, Math.round(value));
+}
+function normalizeRunLinterAfterNormalize(value) {
+  if (typeof value !== "boolean") {
+    return DEFAULT_SETTINGS.runLinterAfterNormalize;
+  }
+  return value;
+}
+function normalizePluginSettings(savedData) {
+  return {
+    lintDelayMs: normalizeLintDelayMs(savedData?.lintDelayMs),
+    runLinterAfterNormalize: normalizeRunLinterAfterNormalize(
+      savedData?.runLinterAfterNormalize
+    )
+  };
+}
+function buildNormalizeSuccessMessage(options) {
+  const { resultSummary, runLinterAfterNormalize, lintScheduled, lintDelayMs } = options;
+  if (!runLinterAfterNormalize) {
+    return `${resultSummary} \u672A\u6267\u884C Linter\u3002`;
+  }
+  if (lintScheduled) {
+    return `\u6807\u9898\u5F52\u4E00\u5B8C\u6210\uFF0C\u5DF2\u89E6\u53D1 Linter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u3002${lintDelayMs}ms \u540E\u6267\u884C\u3002`;
+  }
+  return resultSummary;
+}
+
+// main.ts
 var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
@@ -290,9 +317,7 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
   }
   async loadSettings() {
     const savedData = await this.loadData();
-    this.settings = {
-      lintDelayMs: normalizeLintDelayMs(savedData?.lintDelayMs)
-    };
+    this.settings = normalizePluginSettings(savedData);
   }
   async saveSettings() {
     await this.saveData(this.settings);
@@ -322,18 +347,27 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
       return;
     }
     await this.app.vault.modify(file, result.content);
-    const lintScheduled = scheduleCurrentFileLint(file.path, {
-      hasCommand: (commandId) => Boolean(this.app.commands?.commands?.[commandId]),
-      getActiveFilePath: () => this.app.workspace.getActiveFile()?.path ?? null,
-      executeCommandById: (commandId) => this.app.commands.executeCommandById(commandId),
-      notify: (message) => {
-        new import_obsidian.Notice(message);
+    const lintScheduled = this.settings.runLinterAfterNormalize ? scheduleCurrentFileLint(
+      file.path,
+      {
+        hasCommand: (commandId) => Boolean(this.app.commands?.commands?.[commandId]),
+        getActiveFilePath: () => this.app.workspace.getActiveFile()?.path ?? null,
+        executeCommandById: (commandId) => this.app.commands.executeCommandById(commandId),
+        notify: (message) => {
+          new import_obsidian.Notice(message);
+        },
+        logError: (message, error) => {
+          console.error(message, error);
+        }
       },
-      logError: (message, error) => {
-        console.error(message, error);
-      }
-    }, this.settings.lintDelayMs);
-    const successMessage = lintScheduled ? `\u6807\u9898\u5F52\u4E00\u5B8C\u6210\uFF0C\u5DF2\u89E6\u53D1 Linter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u3002${this.settings.lintDelayMs}ms \u540E\u6267\u884C\u3002` : result.summary;
+      this.settings.lintDelayMs
+    ) : false;
+    const successMessage = buildNormalizeSuccessMessage({
+      resultSummary: result.summary,
+      runLinterAfterNormalize: this.settings.runLinterAfterNormalize,
+      lintScheduled,
+      lintDelayMs: this.settings.lintDelayMs
+    });
     new import_obsidian.Notice(successMessage);
   }
 };
@@ -345,10 +379,19 @@ var FilenameH1BootstrapSettingTab = class extends import_obsidian.PluginSettingT
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Linter \u5EF6\u8FDF\u65F6\u95F4").setDesc("\u6267\u884C\u6807\u9898\u5F52\u4E00\u540E\uFF0C\u7B49\u5F85\u591A\u5C11\u6BEB\u79D2\u518D\u6267\u884C\u201CLinter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u201D\u3002").addText((text) => {
+    new import_obsidian.Setting(containerEl).setName("\u6807\u9898\u5F52\u4E00\u540E\u81EA\u52A8\u6267\u884C Linter").setDesc("\u5F00\u542F\u540E\uFF0C\u6807\u9898\u5F52\u4E00\u771F\u7684\u6539\u52A8\u4E86\u5F53\u524D\u7B14\u8BB0\u65F6\uFF0C\u4F1A\u81EA\u52A8\u6267\u884C\u201CLinter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u201D\u3002").addToggle((toggle) => {
+      toggle.setValue(this.plugin.settings.runLinterAfterNormalize).onChange(async (value) => {
+        this.plugin.settings.runLinterAfterNormalize = value;
+        await this.plugin.saveSettings();
+      });
+    });
+    new import_obsidian.Setting(containerEl).setName("Linter \u5EF6\u8FDF\u65F6\u95F4").setDesc("\u4EC5\u5728\u201C\u6807\u9898\u5F52\u4E00\u540E\u81EA\u52A8\u6267\u884C Linter\u201D\u5F00\u542F\u65F6\u751F\u6548\u3002").addText((text) => {
       text.setPlaceholder(String(CURRENT_FILE_LINTER_DELAY_MS)).setValue(String(this.plugin.settings.lintDelayMs)).onChange(async (value) => {
         const parsedValue = Number(value.trim());
-        this.plugin.settings.lintDelayMs = normalizeLintDelayMs(parsedValue);
+        this.plugin.settings = normalizePluginSettings({
+          ...this.plugin.settings,
+          lintDelayMs: parsedValue
+        });
         await this.plugin.saveSettings();
         text.setValue(String(this.plugin.settings.lintDelayMs));
       });

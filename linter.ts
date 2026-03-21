@@ -5,14 +5,6 @@ export const LINTER_MISSING_NOTICE =
   "未检测到 Linter：格式化当前文件命令，已跳过自动格式化。";
 export const LINTER_FAILED_NOTICE = "Linter 执行失败，标题归一已完成。";
 
-export function normalizeLintDelayMs(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return CURRENT_FILE_LINTER_DELAY_MS;
-  }
-
-  return Math.max(0, Math.round(value));
-}
-
 interface ScheduleCurrentFileLintDeps {
   hasCommand: (commandId: string) => boolean;
   getActiveFilePath: () => string | null;
