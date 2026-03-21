@@ -40,6 +40,20 @@ Default:
 
 ## Installation
 
+### Install with BRAT
+
+If you use [BRAT](https://github.com/TfTHacker/obsidian42-brat), you can install this plugin directly from GitHub:
+
+1. Install and enable `BRAT` in Obsidian
+2. Open `Settings -> BRAT`
+3. Choose `Add Beta plugin`
+4. Paste this repository URL:
+
+`https://github.com/zhaoscsc/obsidian-filename-h1-bootstrap`
+
+5. Confirm the installation
+6. Enable `Filename H1 Bootstrap` in Community Plugins
+
 ### Manual installation
 
 Copy these files into your vault:
@@ -128,6 +142,20 @@ npm run build
 `500`
 
 ### 安装方法
+
+#### 借助 BRAT 安装
+
+如果你已经在用 [BRAT](https://github.com/TfTHacker/obsidian42-brat)，可以直接从 GitHub 安装这个插件：
+
+1. 在 Obsidian 里安装并启用 `BRAT`
+2. 打开 `设置 -> BRAT`
+3. 选择 `Add Beta plugin`
+4. 粘贴这个仓库地址：
+
+`https://github.com/zhaoscsc/obsidian-filename-h1-bootstrap`
+
+5. 确认安装
+6. 回到社区插件列表，启用 `Filename H1 Bootstrap`
 
 #### 手动安装
 
