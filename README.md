@@ -26,6 +26,23 @@ Runs normalization on the currently open Markdown file.
 
 If the note is changed, the plugin can also trigger `Obsidian Linter` for the current file after a configurable delay.
 
+### Shortcut tip
+
+You can assign a hotkey to `Normalize current note title heading` in:
+
+`Settings -> Hotkeys`
+
+If you want a faster one-key workflow, you can bind a shortcut you use often.
+
+Example:
+
+- `Command+S`
+
+Note:
+
+- `Command+S` may override the default save behavior in Obsidian, so use it only if that matches your workflow.
+- If you want a safer choice, use something like `Command+Shift+S` or another custom combination.
+
 ## Settings
 
 ### Linter delay
@@ -128,6 +145,23 @@ npm run build
 处理当前打开的 Markdown 笔记。
 
 如果这次执行确实改动了笔记内容，插件还可以在一个可配置的延迟后，自动执行一次当前文件的 Linter。
+
+#### 小技巧：给命令绑定快捷键
+
+你可以在这里给这个命令绑定快捷键：
+
+`设置 -> 快捷键`
+
+如果你想把“标题归一”变成一个更快的动作，可以绑定一个自己顺手的组合键。
+
+比如：
+
+- `Command+S`
+
+注意：
+
+- `Command+S` 可能会覆盖 Obsidian 默认的保存行为，更适合已经明确想这么改的人。
+- 如果你想更稳妥一些，可以改成 `Command+Shift+S` 或其他自定义组合键。
 
 ### 设置
 
