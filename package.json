@@ -1,0 +1,17 @@
+{
+  "name": "obsidian-filename-h1-bootstrap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.1",
+    "obsidian": "^1.8.10",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.8"
+  }
+}
