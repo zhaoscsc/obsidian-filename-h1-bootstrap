@@ -60,6 +60,94 @@ tags: [科技]
     expect(result.summary).toContain("无需修改");
   });
 
+  it("normalizes a top equivalent H1 after filename punctuation cleanup without creating a duplicate title", () => {
+    const input = `# Tw93分享我的方法，想获得任何网页纯Markdown。
+
+## 正文
+
+Tw93分享我的方法，想获得任何网页纯Markdown。`;
+
+    const result = normalizeMarkdownTitleHeading(
+      input,
+      "Tw93分享我的方法，想获得任何网页纯Markdown"
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.content).toBe(
+      `# Tw93分享我的方法，想获得任何网页纯Markdown
+
+## 正文
+
+Tw93分享我的方法，想获得任何网页纯Markdown。`
+    );
+    expect(result.content).not.toContain("## Tw93分享我的方法，想获得任何网页纯Markdown。");
+    expect(result.summary).toContain("规范为");
+  });
+
+  it("promotes a top matching H2 to H1 without inserting a duplicate title", () => {
+    const input = `## 澄迈县
+
+## 0\\. 基础信息
+
+正文。`;
+
+    const result = normalizeMarkdownTitleHeading(input, "澄迈县");
+
+    expect(result.changed).toBe(true);
+    expect(result.content).toBe(
+      `# 澄迈县
+
+## 0\\. 基础信息
+
+正文。`
+    );
+    expect(result.content).not.toContain("## 澄迈县");
+    expect(result.summary).toContain("提升为 H1");
+  });
+
+  it("promotes a top equivalent H2 after filename punctuation cleanup without creating a duplicate title", () => {
+    const input = `## Tw93分享我的方法，想获得任何网页纯Markdown。
+
+## 正文
+
+内容。`;
+
+    const result = normalizeMarkdownTitleHeading(
+      input,
+      "Tw93分享我的方法，想获得任何网页纯Markdown"
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.content).toBe(
+      `# Tw93分享我的方法，想获得任何网页纯Markdown
+
+## 正文
+
+内容。`
+    );
+    expect(result.content).not.toContain("## Tw93分享我的方法，想获得任何网页纯Markdown。");
+    expect(result.summary).toContain("提升为 H1");
+  });
+
+  it("promotes a top matching H2 to H1 and adds a blank line before body content", () => {
+    const input = `## 澄迈县
+正文。
+
+## 0\\. 基础信息`;
+
+    const result = normalizeMarkdownTitleHeading(input, "澄迈县");
+
+    expect(result.changed).toBe(true);
+    expect(result.content).toBe(
+      `# 澄迈县
+
+正文。
+
+## 0\\. 基础信息`
+    );
+    expect(result.summary).toContain("空行");
+  });
+
   it("adds a blank line when the top H1 already matches but body starts immediately", () => {
     const input = `# 干粉灭火器
 正文。
@@ -112,6 +200,42 @@ tags: [科技]
     );
 
     expect(firstRun.changed).toBe(false);
+    expect(secondRun.changed).toBe(false);
+    expect(secondRun.content).toBe(firstRun.content);
+  });
+
+  it("is idempotent after promoting a top matching H2 to H1", () => {
+    const input = `## 澄迈县
+
+## 0\\. 基础信息
+
+正文。`;
+
+    const firstRun = normalizeMarkdownTitleHeading(input, "澄迈县");
+    const secondRun = normalizeMarkdownTitleHeading(firstRun.content, "澄迈县");
+
+    expect(firstRun.changed).toBe(true);
+    expect(secondRun.changed).toBe(false);
+    expect(secondRun.content).toBe(firstRun.content);
+  });
+
+  it("is idempotent after normalizing a top equivalent H1", () => {
+    const input = `# Tw93分享我的方法，想获得任何网页纯Markdown。
+
+## 正文
+
+内容。`;
+
+    const firstRun = normalizeMarkdownTitleHeading(
+      input,
+      "Tw93分享我的方法，想获得任何网页纯Markdown"
+    );
+    const secondRun = normalizeMarkdownTitleHeading(
+      firstRun.content,
+      "Tw93分享我的方法，想获得任何网页纯Markdown"
+    );
+
+    expect(firstRun.changed).toBe(true);
     expect(secondRun.changed).toBe(false);
     expect(secondRun.content).toBe(firstRun.content);
   });

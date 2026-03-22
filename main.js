@@ -58,6 +58,7 @@ function scheduleCurrentFileLint(targetFilePath, deps, delayMs = CURRENT_FILE_LI
 }
 
 // normalize.ts
+var TRAILING_FILENAME_PUNCTUATION_PATTERN = /[ \t]*[.,;:!。，；：！]+[ \t]*$/u;
 var BLANK_LINE = "";
 var FENCE_PATTERN = /^( {0,3})(`{3,}|~{3,})(.*)$/;
 var ATX_HEADING_PATTERN = /^( {0,3})(#{1,6})[ \t]+(.*)$/;
@@ -84,6 +85,9 @@ function skipBlankLines(lines, start) {
 }
 function normalizeHeadingText(rawText) {
   return rawText.replace(/[ \t]+#+[ \t]*$/, "").trim();
+}
+function sanitizeComparableTitleText(text) {
+  return text.replace(TRAILING_FILENAME_PUNCTUATION_PATTERN, "");
 }
 function parseAtxHeading(line) {
   const match = line.match(ATX_HEADING_PATTERN);
@@ -185,6 +189,27 @@ function ensureSingleBlankLineAfterHeading(lines, headingIndex) {
     changed: true
   };
 }
+function promoteTopMatchingH2(lines, headingIndex, fileBasename, newline) {
+  const nextLines = [...lines];
+  nextLines[headingIndex] = buildHeadingLine("", 1, fileBasename);
+  const spacingResult = ensureSingleBlankLineAfterHeading(nextLines, headingIndex);
+  return {
+    changed: true,
+    content: spacingResult.lines.join(newline),
+    summary: spacingResult.changed ? `\u5DF2\u5C06\u5F00\u5934\u540C\u540D H2 \u63D0\u5347\u4E3A H1\u300C${fileBasename}\u300D\uFF0C\u5E76\u89C4\u8303\u6807\u9898\u540E\u7684\u7A7A\u884C\u3002` : `\u5DF2\u5C06\u5F00\u5934\u540C\u540D H2 \u63D0\u5347\u4E3A H1\u300C${fileBasename}\u300D\u3002`
+  };
+}
+function normalizeTopEquivalentHeading(lines, headingIndex, fileBasename, newline, previousLevel) {
+  const nextLines = [...lines];
+  nextLines[headingIndex] = buildHeadingLine("", 1, fileBasename);
+  const spacingResult = ensureSingleBlankLineAfterHeading(nextLines, headingIndex);
+  const headingSummary = previousLevel === 1 ? `\u5DF2\u5C06\u5F00\u5934 H1 \u6807\u9898\u89C4\u8303\u4E3A\u300C${fileBasename}\u300D\u3002` : `\u5DF2\u5C06\u5F00\u5934\u540C\u540D H2 \u63D0\u5347\u4E3A H1\u300C${fileBasename}\u300D\u3002`;
+  return {
+    changed: true,
+    content: spacingResult.lines.join(newline),
+    summary: spacingResult.changed ? `${headingSummary.slice(0, -1)}\uFF0C\u5E76\u89C4\u8303\u6807\u9898\u540E\u7684\u7A7A\u884C\u3002` : headingSummary
+  };
+}
 function normalizeMarkdownTitleHeading(content, fileBasename) {
   const newline = detectNewline(content);
   const lines = content.split(/\r?\n/);
@@ -210,7 +235,11 @@ function normalizeMarkdownTitleHeading(content, fileBasename) {
   const headings = collectAtxHeadings(lines, bodyStart);
   const firstBodyLineIndex = bodyStart;
   const firstBodyHeading = parseAtxHeading(lines[firstBodyLineIndex]);
+  const firstBodyHeadingComparableText = firstBodyHeading === null ? "" : sanitizeComparableTitleText(firstBodyHeading.text);
+  const topEquivalentH1 = firstBodyHeading !== null && firstBodyHeading.level === 1 && firstBodyHeading.text !== fileBasename && firstBodyHeadingComparableText === fileBasename;
+  const topEquivalentH2 = firstBodyHeading !== null && firstBodyHeading.level === 2 && firstBodyHeadingComparableText === fileBasename;
   const topTitleMatches = firstBodyHeading !== null && firstBodyHeading.level === 1 && firstBodyHeading.text === fileBasename;
+  const topMatchingH2 = firstBodyHeading !== null && firstBodyHeading.level === 2 && firstBodyHeading.text === fileBasename;
   const h1Headings = headings.filter((heading) => heading.level === 1);
   const hasAnyH1 = h1Headings.length > 0;
   if (topTitleMatches) {
@@ -220,6 +249,15 @@ function normalizeMarkdownTitleHeading(content, fileBasename) {
       content: spacingResult.lines.join(newline),
       summary: spacingResult.changed ? `\u5DF2\u89C4\u8303\u9876\u90E8 H1\u300C${fileBasename}\u300D\u4E0E\u6B63\u6587\u4E4B\u95F4\u7684\u7A7A\u884C\u3002` : `\u65E0\u9700\u4FEE\u6539\uFF0C\u9876\u90E8 H1 \u5DF2\u4E0E\u6587\u4EF6\u540D\u201C${fileBasename}\u201D\u4E00\u81F4\u3002`
     };
+  }
+  if (topEquivalentH1) {
+    return normalizeTopEquivalentHeading(lines, firstBodyLineIndex, fileBasename, newline, 1);
+  }
+  if (topMatchingH2) {
+    return promoteTopMatchingH2(lines, firstBodyLineIndex, fileBasename, newline);
+  }
+  if (topEquivalentH2) {
+    return normalizeTopEquivalentHeading(lines, firstBodyLineIndex, fileBasename, newline, 2);
   }
   const nextLines = [...lines];
   let demotedCount = 0;
@@ -293,9 +331,9 @@ function shouldScheduleLinter(linterRunMode, changed) {
 }
 
 // title.ts
-var TRAILING_FILENAME_PUNCTUATION_PATTERN = /[ \t]*[.,;:!。，；：！]+[ \t]*$/u;
+var TRAILING_FILENAME_PUNCTUATION_PATTERN2 = /[ \t]*[.,;:!。，；：！]+[ \t]*$/u;
 function sanitizeFilenameBasename(fileBasename) {
-  return fileBasename.replace(TRAILING_FILENAME_PUNCTUATION_PATTERN, "");
+  return fileBasename.replace(TRAILING_FILENAME_PUNCTUATION_PATTERN2, "");
 }
 function buildRenamedFilePath(filePath, oldBasename, newBasename, extension) {
   const oldFileName = `${oldBasename}.${extension}`;

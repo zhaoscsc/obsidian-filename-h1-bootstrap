@@ -1,7 +1,7 @@
 {
   "id": "obsidian-filename-h1-bootstrap",
   "name": "Filename H1 Bootstrap",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "minAppVersion": "1.5.0",
   "description": "Manually normalize the current note so the filename becomes the top H1 heading.",
   "author": "OpenAI Codex",

@@ -5,6 +5,8 @@ export interface NormalizeResult {
   notice?: string;
 }
 
+const TRAILING_FILENAME_PUNCTUATION_PATTERN = /[ \t]*[.,;:!。，；：！]+[ \t]*$/u;
+
 interface HeadingMatch {
   indent: string;
   level: number;
@@ -47,6 +49,10 @@ function skipBlankLines(lines: string[], start: number): number {
 
 function normalizeHeadingText(rawText: string): string {
   return rawText.replace(/[ \t]+#+[ \t]*$/, "").trim();
+}
+
+function sanitizeComparableTitleText(text: string): string {
+  return text.replace(TRAILING_FILENAME_PUNCTUATION_PATTERN, "");
 }
 
 function parseAtxHeading(line: string): HeadingMatch | null {
@@ -186,6 +192,51 @@ function ensureSingleBlankLineAfterHeading(
   };
 }
 
+function promoteTopMatchingH2(
+  lines: string[],
+  headingIndex: number,
+  fileBasename: string,
+  newline: string
+): NormalizeResult {
+  const nextLines = [...lines];
+  nextLines[headingIndex] = buildHeadingLine("", 1, fileBasename);
+
+  const spacingResult = ensureSingleBlankLineAfterHeading(nextLines, headingIndex);
+
+  return {
+    changed: true,
+    content: spacingResult.lines.join(newline),
+    summary: spacingResult.changed
+      ? `已将开头同名 H2 提升为 H1「${fileBasename}」，并规范标题后的空行。`
+      : `已将开头同名 H2 提升为 H1「${fileBasename}」。`
+  };
+}
+
+function normalizeTopEquivalentHeading(
+  lines: string[],
+  headingIndex: number,
+  fileBasename: string,
+  newline: string,
+  previousLevel: 1 | 2
+): NormalizeResult {
+  const nextLines = [...lines];
+  nextLines[headingIndex] = buildHeadingLine("", 1, fileBasename);
+
+  const spacingResult = ensureSingleBlankLineAfterHeading(nextLines, headingIndex);
+  const headingSummary =
+    previousLevel === 1
+      ? `已将开头 H1 标题规范为「${fileBasename}」。`
+      : `已将开头同名 H2 提升为 H1「${fileBasename}」。`;
+
+  return {
+    changed: true,
+    content: spacingResult.lines.join(newline),
+    summary: spacingResult.changed
+      ? `${headingSummary.slice(0, -1)}，并规范标题后的空行。`
+      : headingSummary
+  };
+}
+
 export function normalizeMarkdownTitleHeading(
   content: string,
   fileBasename: string
@@ -217,9 +268,24 @@ export function normalizeMarkdownTitleHeading(
   const headings = collectAtxHeadings(lines, bodyStart);
   const firstBodyLineIndex = bodyStart;
   const firstBodyHeading = parseAtxHeading(lines[firstBodyLineIndex]);
+  const firstBodyHeadingComparableText =
+    firstBodyHeading === null ? "" : sanitizeComparableTitleText(firstBodyHeading.text);
+  const topEquivalentH1 =
+    firstBodyHeading !== null &&
+    firstBodyHeading.level === 1 &&
+    firstBodyHeading.text !== fileBasename &&
+    firstBodyHeadingComparableText === fileBasename;
+  const topEquivalentH2 =
+    firstBodyHeading !== null &&
+    firstBodyHeading.level === 2 &&
+    firstBodyHeadingComparableText === fileBasename;
   const topTitleMatches =
     firstBodyHeading !== null &&
     firstBodyHeading.level === 1 &&
+    firstBodyHeading.text === fileBasename;
+  const topMatchingH2 =
+    firstBodyHeading !== null &&
+    firstBodyHeading.level === 2 &&
     firstBodyHeading.text === fileBasename;
 
   const h1Headings = headings.filter((heading) => heading.level === 1);
@@ -234,6 +300,18 @@ export function normalizeMarkdownTitleHeading(
         ? `已规范顶部 H1「${fileBasename}」与正文之间的空行。`
         : `无需修改，顶部 H1 已与文件名“${fileBasename}”一致。`
     };
+  }
+
+  if (topEquivalentH1) {
+    return normalizeTopEquivalentHeading(lines, firstBodyLineIndex, fileBasename, newline, 1);
+  }
+
+  if (topMatchingH2) {
+    return promoteTopMatchingH2(lines, firstBodyLineIndex, fileBasename, newline);
+  }
+
+  if (topEquivalentH2) {
+    return normalizeTopEquivalentHeading(lines, firstBodyLineIndex, fileBasename, newline, 2);
   }
 
   const nextLines = [...lines];

@@ -11,8 +11,10 @@ This plugin is designed for note libraries where the filename is the source of t
 When you run `Normalize current note title heading`, the plugin will:
 
 - trim trailing punctuation from the current filename before normalization when it ends with `.,;:!。，；：！`
+- normalize the existing top heading in place when it only differs from the filename by trailing punctuation
 - insert `# <filename>` at the top of the note when needed
 - demote existing ATX H1 headings so the filename becomes the single top-level title
+- promote a top matching `## <filename>` to `# <filename>` instead of creating a duplicate title
 - preserve H2-H6 when there is no existing H1
 - enforce a single blank line between the top H1 and the following body content
 - ignore fenced code blocks
@@ -149,7 +151,9 @@ npm run build
 
 - 在需要时，把 `# 文件名` 插到正文最前面
 - 如果文件名尾部是 `.,;:!。，；：！` 这些符号，会先自动清理掉再继续处理
+- 如果正文开头标题和文件名的差异只剩尾部这些标点，会直接原地规范现有标题，避免生成重复标题
 - 如果正文已经有 ATX H1，就把这些 H1 整体降一级
+- 如果正文开头已经是同名 H2，会直接提升为 H1，而不是再额外创建一个同名标题
 - 如果正文没有 H1，只保留原有 H2-H6 层级不变
 - 强制保证顶部 H1 和正文之间只有一个空行
 - 跳过代码块里的 `#`
