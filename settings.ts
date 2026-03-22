@@ -54,23 +54,18 @@ export function normalizePluginSettings(
 
 export function buildNormalizeSuccessMessage(options: {
   resultSummary: string;
-  changed: boolean;
   linterRunMode: LinterRunMode;
   lintScheduled: boolean;
   lintDelayMs: number;
 }): string {
-  const { resultSummary, changed, linterRunMode, lintScheduled, lintDelayMs } = options;
+  const { resultSummary, linterRunMode, lintScheduled, lintDelayMs } = options;
 
   if (linterRunMode === "never") {
     return `${resultSummary} 未执行 Linter。`;
   }
 
   if (lintScheduled) {
-    if (!changed) {
-      return `${resultSummary} 已触发 Linter：格式化当前文件。${lintDelayMs}ms 后执行。`;
-    }
-
-    return `标题归一完成，已触发 Linter：格式化当前文件。${lintDelayMs}ms 后执行。`;
+    return `${resultSummary} 已触发 Linter：格式化当前文件。${lintDelayMs}ms 后执行。`;
   }
 
   return resultSummary;

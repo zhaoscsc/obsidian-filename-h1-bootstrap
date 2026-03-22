@@ -60,7 +60,6 @@ describe("buildNormalizeSuccessMessage", () => {
     expect(
       buildNormalizeSuccessMessage({
         resultSummary: "已插入 H1。",
-        changed: true,
         linterRunMode: "changed_only",
         lintScheduled: true,
         lintDelayMs: 500
@@ -72,7 +71,6 @@ describe("buildNormalizeSuccessMessage", () => {
     expect(
       buildNormalizeSuccessMessage({
         resultSummary: "已插入 H1。",
-        changed: true,
         linterRunMode: "never",
         lintScheduled: false,
         lintDelayMs: 500
@@ -84,7 +82,6 @@ describe("buildNormalizeSuccessMessage", () => {
     expect(
       buildNormalizeSuccessMessage({
         resultSummary: "无需修改。",
-        changed: false,
         linterRunMode: "always",
         lintScheduled: true,
         lintDelayMs: 500
@@ -96,12 +93,22 @@ describe("buildNormalizeSuccessMessage", () => {
     expect(
       buildNormalizeSuccessMessage({
         resultSummary: "已插入 H1。",
-        changed: true,
         linterRunMode: "changed_only",
         lintScheduled: false,
         lintDelayMs: 500
       })
     ).toBe("已插入 H1。");
+  });
+
+  it("keeps a rename summary when linting is scheduled", () => {
+    expect(
+      buildNormalizeSuccessMessage({
+        resultSummary: "已将文件名从「旧标题。」重命名为「旧标题」。",
+        linterRunMode: "changed_only",
+        lintScheduled: true,
+        lintDelayMs: 500
+      })
+    ).toBe("已将文件名从「旧标题。」重命名为「旧标题」。 已触发 Linter：格式化当前文件。500ms 后执行。");
   });
 });
 

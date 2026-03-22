@@ -8,6 +8,7 @@ import {
   normalizePluginSettings,
   shouldScheduleLinter
 } from "./settings";
+import { buildRenamedFilePath, sanitizeFilenameBasename } from "./title";
 
 export default class FilenameH1BootstrapPlugin extends Plugin {
   settings: FilenameH1BootstrapSettings = DEFAULT_SETTINGS;
@@ -52,8 +53,33 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
       return;
     }
 
-    const originalContent = await this.app.vault.read(file);
-    const result = normalizeMarkdownTitleHeading(originalContent, file.basename);
+    const sanitizedBasename = sanitizeFilenameBasename(file.basename);
+    let targetFile = file;
+    let renameSummary = "";
+    let renamed = false;
+
+    if (sanitizedBasename && sanitizedBasename !== file.basename) {
+      const nextPath = buildRenamedFilePath(
+        file.path,
+        file.basename,
+        sanitizedBasename,
+        file.extension
+      );
+
+      try {
+        await this.app.fileManager.renameFile(file, nextPath);
+        targetFile = this.app.workspace.getActiveFile() ?? file;
+        renamed = true;
+        renameSummary = `已将文件名从「${file.basename}」重命名为「${sanitizedBasename}」。`;
+      } catch (error) {
+        new Notice("当前笔记重命名失败，已跳过处理。");
+        console.error("[obsidian-filename-h1-bootstrap] Failed to rename current note.", error);
+        return;
+      }
+    }
+
+    const originalContent = await this.app.vault.read(targetFile);
+    const result = normalizeMarkdownTitleHeading(originalContent, sanitizedBasename || targetFile.basename);
 
     if (result.notice) {
       new Notice(result.notice);
@@ -61,12 +87,20 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
     }
 
     if (result.changed) {
-      await this.app.vault.modify(file, result.content);
+      await this.app.vault.modify(targetFile, result.content);
     }
 
-    const lintScheduled = shouldScheduleLinter(this.settings.linterRunMode, result.changed)
+    const commandChanged = renamed || result.changed;
+    const resultSummary =
+      renamed && result.changed
+        ? `${renameSummary} ${result.summary}`
+        : renamed
+          ? renameSummary
+          : result.summary;
+
+    const lintScheduled = shouldScheduleLinter(this.settings.linterRunMode, commandChanged)
       ? scheduleCurrentFileLint(
-          file.path,
+          targetFile.path,
           {
             hasCommand: (commandId) => Boolean(this.app.commands?.commands?.[commandId]),
             getActiveFilePath: () => this.app.workspace.getActiveFile()?.path ?? null,
@@ -83,14 +117,13 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
         )
       : false;
 
-    if (!result.changed && !lintScheduled) {
-      new Notice(result.summary);
+    if (!commandChanged && !lintScheduled) {
+      new Notice(resultSummary);
       return;
     }
 
     const successMessage = buildNormalizeSuccessMessage({
-      resultSummary: result.summary,
-      changed: result.changed,
+      resultSummary,
       linterRunMode: this.settings.linterRunMode,
       lintScheduled,
       lintDelayMs: this.settings.lintDelayMs

@@ -10,6 +10,7 @@ This plugin is designed for note libraries where the filename is the source of t
 
 When you run `Normalize current note title heading`, the plugin will:
 
+- trim trailing punctuation from the current filename before normalization when it ends with `.,;:!。，；：！`
 - insert `# <filename>` at the top of the note when needed
 - demote existing ATX H1 headings so the filename becomes the single top-level title
 - preserve H2-H6 when there is no existing H1
@@ -147,6 +148,7 @@ npm run build
 当你执行 `Normalize current note title heading` 时，插件会：
 
 - 在需要时，把 `# 文件名` 插到正文最前面
+- 如果文件名尾部是 `.,;:!。，；：！` 这些符号，会先自动清理掉再继续处理
 - 如果正文已经有 ATX H1，就把这些 H1 整体降一级
 - 如果正文没有 H1，只保留原有 H2-H6 层级不变
 - 强制保证顶部 H1 和正文之间只有一个空行

@@ -225,7 +225,7 @@ export function normalizeMarkdownTitleHeading(
   const h1Headings = headings.filter((heading) => heading.level === 1);
   const hasAnyH1 = h1Headings.length > 0;
 
-  if (topTitleMatches && h1Headings.length === 1) {
+  if (topTitleMatches) {
     const spacingResult = ensureSingleBlankLineAfterHeading(lines, firstBodyLineIndex);
     return {
       changed: spacingResult.changed,
@@ -238,36 +238,6 @@ export function normalizeMarkdownTitleHeading(
 
   const nextLines = [...lines];
   let demotedCount = 0;
-
-  if (topTitleMatches) {
-    for (const heading of headings) {
-      if (heading.lineIndex === firstBodyLineIndex) {
-        continue;
-      }
-
-      nextLines[heading.lineIndex] = buildHeadingLine(
-        heading.indent,
-        heading.level + 1,
-        heading.text
-      );
-      demotedCount += 1;
-    }
-
-    const spacingResult = ensureSingleBlankLineAfterHeading(nextLines, firstBodyLineIndex);
-
-    return {
-      changed: demotedCount > 0 || spacingResult.changed,
-      content: spacingResult.lines.join(newline),
-      summary:
-        demotedCount > 0 && spacingResult.changed
-          ? `保留顶部 H1「${fileBasename}」，并降级 ${demotedCount} 个后续标题，同时补齐标题后的空行。`
-          : demotedCount > 0
-            ? `保留顶部 H1「${fileBasename}」，并降级 ${demotedCount} 个后续标题。`
-            : spacingResult.changed
-              ? `已规范顶部 H1「${fileBasename}」与正文之间的空行。`
-              : `无需修改，顶部 H1 已与文件名“${fileBasename}”一致。`
-    };
-  }
 
   if (hasAnyH1) {
     for (const heading of headings) {

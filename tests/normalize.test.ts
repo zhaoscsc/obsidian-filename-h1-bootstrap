@@ -79,7 +79,7 @@ tags: [科技]
     expect(result.summary).toContain("空行");
   });
 
-  it("demotes later headings when the top H1 already matches but later H1 exists", () => {
+  it("does not demote later headings when the top H1 already matches", () => {
     const input = `# 干粉灭火器
 
 正文。
@@ -90,10 +90,30 @@ tags: [科技]
 
     const result = normalizeMarkdownTitleHeading(input, "干粉灭火器");
 
-    expect(result.changed).toBe(true);
-    expect(result.content).toContain("# 干粉灭火器");
-    expect(result.content).toContain("## 用途");
-    expect(result.content).toContain("### 细节");
+    expect(result.changed).toBe(false);
+    expect(result.content).toBe(input);
+    expect(result.summary).toContain("无需修改");
+  });
+
+  it("is idempotent when run multiple times after normalization", () => {
+    const input = `# Claude Dispatch 特别适合小白用户。可以通过手机 Claude App 远程执行任务
+
+## Claude Dispatch 特别适合小白用户。可以通过手机 Claude App 远程执行任务
+
+### Claude Dispatch 特别适合小白用户。可以通过手机 Claude App 远程执行任务`;
+
+    const firstRun = normalizeMarkdownTitleHeading(
+      input,
+      "Claude Dispatch 特别适合小白用户。可以通过手机 Claude App 远程执行任务"
+    );
+    const secondRun = normalizeMarkdownTitleHeading(
+      firstRun.content,
+      "Claude Dispatch 特别适合小白用户。可以通过手机 Claude App 远程执行任务"
+    );
+
+    expect(firstRun.changed).toBe(false);
+    expect(secondRun.changed).toBe(false);
+    expect(secondRun.content).toBe(firstRun.content);
   });
 
   it("ignores ATX-like lines inside fenced code blocks", () => {
