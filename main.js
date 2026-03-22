@@ -265,7 +265,7 @@ function normalizeMarkdownTitleHeading(content, fileBasename) {
 // settings.ts
 var DEFAULT_SETTINGS = {
   lintDelayMs: CURRENT_FILE_LINTER_DELAY_MS,
-  runLinterAfterNormalize: true
+  linterRunMode: "changed_only"
 };
 function normalizeLintDelayMs(value) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -273,29 +273,45 @@ function normalizeLintDelayMs(value) {
   }
   return Math.max(0, Math.round(value));
 }
-function normalizeRunLinterAfterNormalize(value) {
-  if (typeof value !== "boolean") {
-    return DEFAULT_SETTINGS.runLinterAfterNormalize;
+function normalizeLinterRunMode(value, legacyRunLinterAfterNormalize) {
+  if (value === "never" || value === "changed_only" || value === "always") {
+    return value;
   }
-  return value;
+  if (typeof legacyRunLinterAfterNormalize === "boolean") {
+    return legacyRunLinterAfterNormalize ? "changed_only" : "never";
+  }
+  return DEFAULT_SETTINGS.linterRunMode;
 }
 function normalizePluginSettings(savedData) {
   return {
     lintDelayMs: normalizeLintDelayMs(savedData?.lintDelayMs),
-    runLinterAfterNormalize: normalizeRunLinterAfterNormalize(
+    linterRunMode: normalizeLinterRunMode(
+      savedData?.linterRunMode,
       savedData?.runLinterAfterNormalize
     )
   };
 }
 function buildNormalizeSuccessMessage(options) {
-  const { resultSummary, runLinterAfterNormalize, lintScheduled, lintDelayMs } = options;
-  if (!runLinterAfterNormalize) {
+  const { resultSummary, changed, linterRunMode, lintScheduled, lintDelayMs } = options;
+  if (linterRunMode === "never") {
     return `${resultSummary} \u672A\u6267\u884C Linter\u3002`;
   }
   if (lintScheduled) {
+    if (!changed) {
+      return `${resultSummary} \u5DF2\u89E6\u53D1 Linter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u3002${lintDelayMs}ms \u540E\u6267\u884C\u3002`;
+    }
     return `\u6807\u9898\u5F52\u4E00\u5B8C\u6210\uFF0C\u5DF2\u89E6\u53D1 Linter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u3002${lintDelayMs}ms \u540E\u6267\u884C\u3002`;
   }
   return resultSummary;
+}
+function shouldScheduleLinter(linterRunMode, changed) {
+  if (linterRunMode === "never") {
+    return false;
+  }
+  if (linterRunMode === "always") {
+    return true;
+  }
+  return changed;
 }
 
 // main.ts
@@ -342,12 +358,10 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
       new import_obsidian.Notice(result.notice);
       return;
     }
-    if (!result.changed) {
-      new import_obsidian.Notice(result.summary);
-      return;
+    if (result.changed) {
+      await this.app.vault.modify(file, result.content);
     }
-    await this.app.vault.modify(file, result.content);
-    const lintScheduled = this.settings.runLinterAfterNormalize ? scheduleCurrentFileLint(
+    const lintScheduled = shouldScheduleLinter(this.settings.linterRunMode, result.changed) ? scheduleCurrentFileLint(
       file.path,
       {
         hasCommand: (commandId) => Boolean(this.app.commands?.commands?.[commandId]),
@@ -362,9 +376,14 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
       },
       this.settings.lintDelayMs
     ) : false;
+    if (!result.changed && !lintScheduled) {
+      new import_obsidian.Notice(result.summary);
+      return;
+    }
     const successMessage = buildNormalizeSuccessMessage({
       resultSummary: result.summary,
-      runLinterAfterNormalize: this.settings.runLinterAfterNormalize,
+      changed: result.changed,
+      linterRunMode: this.settings.linterRunMode,
       lintScheduled,
       lintDelayMs: this.settings.lintDelayMs
     });
@@ -379,13 +398,16 @@ var FilenameH1BootstrapSettingTab = class extends import_obsidian.PluginSettingT
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("\u6807\u9898\u5F52\u4E00\u540E\u81EA\u52A8\u6267\u884C Linter").setDesc("\u5F00\u542F\u540E\uFF0C\u6807\u9898\u5F52\u4E00\u771F\u7684\u6539\u52A8\u4E86\u5F53\u524D\u7B14\u8BB0\u65F6\uFF0C\u4F1A\u81EA\u52A8\u6267\u884C\u201CLinter\uFF1A\u683C\u5F0F\u5316\u5F53\u524D\u6587\u4EF6\u201D\u3002").addToggle((toggle) => {
-      toggle.setValue(this.plugin.settings.runLinterAfterNormalize).onChange(async (value) => {
-        this.plugin.settings.runLinterAfterNormalize = value;
+    new import_obsidian.Setting(containerEl).setName("Linter \u6267\u884C\u6A21\u5F0F").setDesc("\u63A7\u5236\u6807\u9898\u5F52\u4E00\u547D\u4EE4\u6267\u884C\u540E\uFF0C\u5F53\u524D\u6587\u4EF6\u7684 Linter \u89E6\u53D1\u65B9\u5F0F\u3002").addDropdown((dropdown) => {
+      dropdown.addOption("never", "\u4E0D\u6267\u884C").addOption("changed_only", "\u4EC5\u4FEE\u6539\u65F6\u6267\u884C").addOption("always", "\u59CB\u7EC8\u6267\u884C").setValue(this.plugin.settings.linterRunMode).onChange(async (value) => {
+        this.plugin.settings = normalizePluginSettings({
+          ...this.plugin.settings,
+          linterRunMode: value
+        });
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian.Setting(containerEl).setName("Linter \u5EF6\u8FDF\u65F6\u95F4").setDesc("\u4EC5\u5728\u201C\u6807\u9898\u5F52\u4E00\u540E\u81EA\u52A8\u6267\u884C Linter\u201D\u5F00\u542F\u65F6\u751F\u6548\u3002").addText((text) => {
+    new import_obsidian.Setting(containerEl).setName("Linter \u5EF6\u8FDF\u65F6\u95F4").setDesc("\u4EC5\u5728 Linter \u6267\u884C\u6A21\u5F0F\u4E0D\u662F\u201C\u4E0D\u6267\u884C\u201D\u65F6\u751F\u6548\u3002").addText((text) => {
       text.setPlaceholder(String(CURRENT_FILE_LINTER_DELAY_MS)).setValue(String(this.plugin.settings.lintDelayMs)).onChange(async (value) => {
         const parsedValue = Number(value.trim());
         this.plugin.settings = normalizePluginSettings({

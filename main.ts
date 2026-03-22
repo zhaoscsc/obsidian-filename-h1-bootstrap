@@ -5,7 +5,8 @@ import {
   DEFAULT_SETTINGS,
   FilenameH1BootstrapSettings,
   buildNormalizeSuccessMessage,
-  normalizePluginSettings
+  normalizePluginSettings,
+  shouldScheduleLinter
 } from "./settings";
 
 export default class FilenameH1BootstrapPlugin extends Plugin {
@@ -59,13 +60,11 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
       return;
     }
 
-    if (!result.changed) {
-      new Notice(result.summary);
-      return;
+    if (result.changed) {
+      await this.app.vault.modify(file, result.content);
     }
 
-    await this.app.vault.modify(file, result.content);
-    const lintScheduled = this.settings.runLinterAfterNormalize
+    const lintScheduled = shouldScheduleLinter(this.settings.linterRunMode, result.changed)
       ? scheduleCurrentFileLint(
           file.path,
           {
@@ -84,9 +83,15 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
         )
       : false;
 
+    if (!result.changed && !lintScheduled) {
+      new Notice(result.summary);
+      return;
+    }
+
     const successMessage = buildNormalizeSuccessMessage({
       resultSummary: result.summary,
-      runLinterAfterNormalize: this.settings.runLinterAfterNormalize,
+      changed: result.changed,
+      linterRunMode: this.settings.linterRunMode,
       lintScheduled,
       lintDelayMs: this.settings.lintDelayMs
     });
@@ -108,20 +113,26 @@ class FilenameH1BootstrapSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     new Setting(containerEl)
-      .setName("标题归一后自动执行 Linter")
-      .setDesc("开启后，标题归一真的改动了当前笔记时，会自动执行“Linter：格式化当前文件”。")
-      .addToggle((toggle) => {
-        toggle
-          .setValue(this.plugin.settings.runLinterAfterNormalize)
+      .setName("Linter 执行模式")
+      .setDesc("控制标题归一命令执行后，当前文件的 Linter 触发方式。")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("never", "不执行")
+          .addOption("changed_only", "仅修改时执行")
+          .addOption("always", "始终执行")
+          .setValue(this.plugin.settings.linterRunMode)
           .onChange(async (value) => {
-            this.plugin.settings.runLinterAfterNormalize = value;
+            this.plugin.settings = normalizePluginSettings({
+              ...this.plugin.settings,
+              linterRunMode: value
+            });
             await this.plugin.saveSettings();
           });
       });
 
     new Setting(containerEl)
       .setName("Linter 延迟时间")
-      .setDesc("仅在“标题归一后自动执行 Linter”开启时生效。")
+      .setDesc("仅在 Linter 执行模式不是“不执行”时生效。")
       .addText((text) => {
         text
           .setPlaceholder(String(CURRENT_FILE_LINTER_DELAY_MS))
