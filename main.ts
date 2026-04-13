@@ -1,6 +1,7 @@
 import { MarkdownView, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import { CURRENT_FILE_LINTER_DELAY_MS, scheduleCurrentFileLint } from "./linter";
 import { normalizeMarkdownTitleHeading } from "./normalize";
+import { normalizeFolder } from "./folder";
 import {
   DEFAULT_SETTINGS,
   FilenameH1BootstrapSettings,
@@ -23,6 +24,22 @@ export default class FilenameH1BootstrapPlugin extends Plugin {
         await this.normalizeCurrentNote();
       }
     });
+
+    // Register folder context menu
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        // Only show menu for folders (files have an extension, folders don't)
+        if (file.extension !== undefined) return;
+
+        menu.addItem((item) => {
+          item
+            .setTitle("Normalize folder H1 headings")
+            .onClick(async () => {
+              await normalizeFolder(this.app, file, { recursive: false });
+            });
+        });
+      })
+    );
 
     this.addSettingTab(new FilenameH1BootstrapSettingTab(this.app, this));
   }

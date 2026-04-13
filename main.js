@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => FilenameH1BootstrapPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian = require("obsidian");
+var import_obsidian2 = require("obsidian");
 
 // linter.ts
 var CURRENT_FILE_LINTER_COMMAND_ID = "obsidian-linter:lint-file";
@@ -281,6 +281,109 @@ function normalizeMarkdownTitleHeading(content, fileBasename) {
   };
 }
 
+// folder.ts
+var import_obsidian = require("obsidian");
+
+// title.ts
+var TRAILING_FILENAME_PUNCTUATION_PATTERN2 = /[ \t]*[.,;:!。，；：！]+[ \t]*$/u;
+function sanitizeFilenameBasename(fileBasename) {
+  return fileBasename.replace(TRAILING_FILENAME_PUNCTUATION_PATTERN2, "");
+}
+function buildRenamedFilePath(filePath, oldBasename, newBasename, extension) {
+  const oldFileName = `${oldBasename}.${extension}`;
+  if (!filePath.endsWith(oldFileName)) {
+    return filePath;
+  }
+  return `${filePath.slice(0, -oldFileName.length)}${newBasename}.${extension}`;
+}
+
+// folder.ts
+function isFolder(file) {
+  return "children" in file && Array.isArray(file.children);
+}
+function isMarkdownFile(file) {
+  return file instanceof import_obsidian.TFile && file.extension === "md";
+}
+function collectMarkdownFiles(folder, recursive) {
+  if (!isFolder(folder)) return [];
+  const files = [];
+  for (const child of folder.children) {
+    if (isMarkdownFile(child)) {
+      files.push(child);
+    } else if (recursive && isFolder(child)) {
+      files.push(...collectMarkdownFiles(child, true));
+    }
+  }
+  return files;
+}
+async function processFile(app, file) {
+  const sanitizedBasename = sanitizeFilenameBasename(file.basename);
+  let targetFile = file;
+  let renamed = false;
+  let renameSummary = "";
+  if (sanitizedBasename && sanitizedBasename !== file.basename) {
+    const nextPath = buildRenamedFilePath(
+      file.path,
+      file.basename,
+      sanitizedBasename,
+      file.extension
+    );
+    try {
+      await app.fileManager.renameFile(file, nextPath);
+      targetFile = app.vault.getAbstractFileByPath(nextPath);
+      renamed = true;
+      renameSummary = `\u5DF2\u91CD\u547D\u540D\u300C${file.basename}\u300D\u2192\u300C${sanitizedBasename}\u300D\u3002`;
+    } catch (error) {
+      console.error(
+        "[obsidian-filename-h1-bootstrap] Failed to rename file:",
+        file.path,
+        error
+      );
+      return null;
+    }
+  }
+  const originalContent = await app.vault.read(targetFile);
+  const result = normalizeMarkdownTitleHeading(
+    originalContent,
+    sanitizedBasename || targetFile.basename
+  );
+  if (result.notice) {
+    return null;
+  }
+  if (result.changed) {
+    await app.vault.modify(targetFile, result.content);
+  }
+  const commandChanged = renamed || result.changed;
+  const resultSummary = renamed && result.changed ? `${renameSummary} ${result.summary}` : renamed ? renameSummary : result.summary;
+  return { renamed, changed: commandChanged, summary: resultSummary };
+}
+async function normalizeFolder(app, folder, options) {
+  const files = collectMarkdownFiles(folder, options.recursive);
+  if (files.length === 0) {
+    new import_obsidian.Notice(`\u6587\u4EF6\u5939\u300C${folder.name}\u300D\u4E2D\u6CA1\u6709 Markdown \u6587\u4EF6\u3002`);
+    return { total: 0, changed: 0, renamed: 0, failed: 0, details: [] };
+  }
+  let changed = 0;
+  let renamed = 0;
+  let failed = 0;
+  const details = [];
+  for (const file of files) {
+    const result = await processFile(app, file);
+    if (result === null) {
+      failed += 1;
+    } else {
+      if (result.changed) changed += 1;
+      if (result.renamed) renamed += 1;
+      details.push({ path: file.path, summary: result.summary });
+    }
+  }
+  const modeText = options.recursive ? "\u9012\u5F52" : "\u975E\u9012\u5F52";
+  new import_obsidian.Notice(
+    `\u6587\u4EF6\u5939\u5F52\u4E00\u5316\u5B8C\u6210\uFF08${modeText}\uFF09\uFF1A\u5904\u7406 ${files.length} \u4E2A\u6587\u4EF6\uFF0C${changed} \u4E2A\u6709\u53D8\u5316\uFF0C${renamed} \u4E2A\u91CD\u547D\u540D\uFF0C${failed} \u4E2A\u5931\u8D25\u3002`
+  );
+  return { total: files.length, changed, renamed, failed, details };
+}
+
 // settings.ts
 var DEFAULT_SETTINGS = {
   lintDelayMs: CURRENT_FILE_LINTER_DELAY_MS,
@@ -330,21 +433,8 @@ function shouldScheduleLinter(linterRunMode, changed) {
   return changed;
 }
 
-// title.ts
-var TRAILING_FILENAME_PUNCTUATION_PATTERN2 = /[ \t]*[.,;:!。，；：！]+[ \t]*$/u;
-function sanitizeFilenameBasename(fileBasename) {
-  return fileBasename.replace(TRAILING_FILENAME_PUNCTUATION_PATTERN2, "");
-}
-function buildRenamedFilePath(filePath, oldBasename, newBasename, extension) {
-  const oldFileName = `${oldBasename}.${extension}`;
-  if (!filePath.endsWith(oldFileName)) {
-    return filePath;
-  }
-  return `${filePath.slice(0, -oldFileName.length)}${newBasename}.${extension}`;
-}
-
 // main.ts
-var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
+var FilenameH1BootstrapPlugin = class extends import_obsidian2.Plugin {
   constructor() {
     super(...arguments);
     this.settings = DEFAULT_SETTINGS;
@@ -358,6 +448,16 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
         await this.normalizeCurrentNote();
       }
     });
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        if (file.extension !== void 0) return;
+        menu.addItem((item) => {
+          item.setTitle("Normalize folder H1 headings").onClick(async () => {
+            await normalizeFolder(this.app, file, { recursive: false });
+          });
+        });
+      })
+    );
     this.addSettingTab(new FilenameH1BootstrapSettingTab(this.app, this));
   }
   async loadSettings() {
@@ -368,16 +468,16 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
     await this.saveData(this.settings);
   }
   async normalizeCurrentNote() {
-    const view = this.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian2.MarkdownView);
     const file = view?.file;
     if (!view || !file || file.extension !== "md") {
-      new import_obsidian.Notice("\u5F53\u524D\u6CA1\u6709\u53EF\u5904\u7406\u7684 Markdown \u7B14\u8BB0\u3002");
+      new import_obsidian2.Notice("\u5F53\u524D\u6CA1\u6709\u53EF\u5904\u7406\u7684 Markdown \u7B14\u8BB0\u3002");
       return;
     }
     try {
       await view.save();
     } catch (error) {
-      new import_obsidian.Notice("\u5F53\u524D\u7B14\u8BB0\u4FDD\u5B58\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7\u5904\u7406\u3002");
+      new import_obsidian2.Notice("\u5F53\u524D\u7B14\u8BB0\u4FDD\u5B58\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7\u5904\u7406\u3002");
       console.error("[obsidian-filename-h1-bootstrap] Failed to save current note.", error);
       return;
     }
@@ -398,7 +498,7 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
         renamed = true;
         renameSummary = `\u5DF2\u5C06\u6587\u4EF6\u540D\u4ECE\u300C${file.basename}\u300D\u91CD\u547D\u540D\u4E3A\u300C${sanitizedBasename}\u300D\u3002`;
       } catch (error) {
-        new import_obsidian.Notice("\u5F53\u524D\u7B14\u8BB0\u91CD\u547D\u540D\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7\u5904\u7406\u3002");
+        new import_obsidian2.Notice("\u5F53\u524D\u7B14\u8BB0\u91CD\u547D\u540D\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7\u5904\u7406\u3002");
         console.error("[obsidian-filename-h1-bootstrap] Failed to rename current note.", error);
         return;
       }
@@ -406,7 +506,7 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
     const originalContent = await this.app.vault.read(targetFile);
     const result = normalizeMarkdownTitleHeading(originalContent, sanitizedBasename || targetFile.basename);
     if (result.notice) {
-      new import_obsidian.Notice(result.notice);
+      new import_obsidian2.Notice(result.notice);
       return;
     }
     if (result.changed) {
@@ -421,7 +521,7 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
         getActiveFilePath: () => this.app.workspace.getActiveFile()?.path ?? null,
         executeCommandById: (commandId) => this.app.commands.executeCommandById(commandId),
         notify: (message) => {
-          new import_obsidian.Notice(message);
+          new import_obsidian2.Notice(message);
         },
         logError: (message, error) => {
           console.error(message, error);
@@ -430,7 +530,7 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
       this.settings.lintDelayMs
     ) : false;
     if (!commandChanged && !lintScheduled) {
-      new import_obsidian.Notice(resultSummary);
+      new import_obsidian2.Notice(resultSummary);
       return;
     }
     const successMessage = buildNormalizeSuccessMessage({
@@ -439,10 +539,10 @@ var FilenameH1BootstrapPlugin = class extends import_obsidian.Plugin {
       lintScheduled,
       lintDelayMs: this.settings.lintDelayMs
     });
-    new import_obsidian.Notice(successMessage);
+    new import_obsidian2.Notice(successMessage);
   }
 };
-var FilenameH1BootstrapSettingTab = class extends import_obsidian.PluginSettingTab {
+var FilenameH1BootstrapSettingTab = class extends import_obsidian2.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -450,7 +550,7 @@ var FilenameH1BootstrapSettingTab = class extends import_obsidian.PluginSettingT
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Linter \u6267\u884C\u6A21\u5F0F").setDesc("\u63A7\u5236\u6807\u9898\u5F52\u4E00\u547D\u4EE4\u6267\u884C\u540E\uFF0C\u5F53\u524D\u6587\u4EF6\u7684 Linter \u89E6\u53D1\u65B9\u5F0F\u3002").addDropdown((dropdown) => {
+    new import_obsidian2.Setting(containerEl).setName("Linter \u6267\u884C\u6A21\u5F0F").setDesc("\u63A7\u5236\u6807\u9898\u5F52\u4E00\u547D\u4EE4\u6267\u884C\u540E\uFF0C\u5F53\u524D\u6587\u4EF6\u7684 Linter \u89E6\u53D1\u65B9\u5F0F\u3002").addDropdown((dropdown) => {
       dropdown.addOption("never", "\u4E0D\u6267\u884C").addOption("changed_only", "\u4EC5\u4FEE\u6539\u65F6\u6267\u884C").addOption("always", "\u59CB\u7EC8\u6267\u884C").setValue(this.plugin.settings.linterRunMode).onChange(async (value) => {
         this.plugin.settings = normalizePluginSettings({
           ...this.plugin.settings,
@@ -459,7 +559,7 @@ var FilenameH1BootstrapSettingTab = class extends import_obsidian.PluginSettingT
         await this.plugin.saveSettings();
       });
     });
-    new import_obsidian.Setting(containerEl).setName("Linter \u5EF6\u8FDF\u65F6\u95F4").setDesc("\u4EC5\u5728 Linter \u6267\u884C\u6A21\u5F0F\u4E0D\u662F\u201C\u4E0D\u6267\u884C\u201D\u65F6\u751F\u6548\u3002").addText((text) => {
+    new import_obsidian2.Setting(containerEl).setName("Linter \u5EF6\u8FDF\u65F6\u95F4").setDesc("\u4EC5\u5728 Linter \u6267\u884C\u6A21\u5F0F\u4E0D\u662F\u201C\u4E0D\u6267\u884C\u201D\u65F6\u751F\u6548\u3002").addText((text) => {
       text.setPlaceholder(String(CURRENT_FILE_LINTER_DELAY_MS)).setValue(String(this.plugin.settings.lintDelayMs)).onChange(async (value) => {
         const parsedValue = Number(value.trim());
         this.plugin.settings = normalizePluginSettings({
